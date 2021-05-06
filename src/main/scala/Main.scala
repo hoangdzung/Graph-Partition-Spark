@@ -14,7 +14,7 @@ object Partition {
 
     val spark = SparkSession.builder
       .appName(s"${this.getClass.getSimpleName}")
-      .config("spark.master", "local")
+      // .config("spark.master", "local")
       .getOrCreate()
 
     import spark.implicits._
@@ -30,6 +30,7 @@ object Partition {
     var lambdaRank = args(7).toDouble
     val convergenceThreshold = args(8).toDouble
     val coreOutPath = args(9)
+    val partOutPath = args(10)
     // val vertex2part = sc
     //   .textFile(partFileName)
     //   .map(line => {
@@ -188,7 +189,6 @@ object Partition {
 
     val rawCoreGraph =
       graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
-    coreGraph.cache()
     val largestCCIndex =
       rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
     val coreGraph = rawCoreGraph.subgraph(vpred = (id,attr) => attr == largestCCIndex)
@@ -196,6 +196,16 @@ object Partition {
       .map { case (id, _) => id.toString + " 0" }
       .coalesce(1)
       .saveAsTextFile(coreOutPath)
+    val partGraph = graph.outerJoinVertices(coreGraph.vertices) { (id, oldAttr, outDegOpt) =>
+      outDegOpt match {
+        case Some(outDeg) => 0
+        case None => 1 
+      }}
+    partGraph.subgraph(vpred = (id,attr) => attr == 1)
+      .edges 
+      .map(e => e.srcId.toString + " " + e.dstId.toString)
+      .coalesce(1)
+      .saveAsTextFile(partOutPath)
     spark.stop()
   }
 }
