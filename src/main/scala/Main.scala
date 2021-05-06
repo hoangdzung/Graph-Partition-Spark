@@ -191,7 +191,7 @@ object Partition {
     coreGraph.cache()
     val largestCCIndex =
       rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
-    val coreGraph = rawCoreGraph.subgraph
+    val coreGraph = rawCoreGraph.subgraph(vpred = (id,attr) => attr == largestCCIndex)
     coreGraph.vertices
       .map { case (id, _) => id.toString + " 0" }
       .coalesce(1)
@@ -199,4 +199,3 @@ object Partition {
     spark.stop()
   }
 }
-
