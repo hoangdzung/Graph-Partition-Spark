@@ -2,12 +2,22 @@ package dfep
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SaveMode
 import scala.collection.Map
 import scala.util.Random
 import scala.math.exp
+
+class EdgePartitioner(override val numPartitions: Int) extends Partitioner {
+  def getPartition(key: Any): Int = key match {
+    case s: Int => {
+      s - 1
+    }
+  }
+}
 
 object Partition {
 
@@ -15,7 +25,7 @@ object Partition {
 
     val spark = SparkSession.builder
       .appName(s"${this.getClass.getSimpleName}")
-      .config("spark.master", "local")
+      // .config("spark.master", "local")
       .getOrCreate()
 
     import spark.implicits._
@@ -74,6 +84,21 @@ object Partition {
         (1 + Random.nextInt(numParts), attr)
     })
     graph.cache()
+    // graph.triplets.flatMap(x => {
+    //   if (x.srcAttr._1 == 0 && x.dstAttr._1 ==0 )
+    //     (1 to numParts).map(i => (i, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 != 0 && x.dstAttr._1 ==0)
+    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 == 0 && x.dstAttr._1 !=0)
+    //     Array((x.dstAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 == x.dstAttr._1 )
+    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else
+    //     Array[(String, String)]()
+    // })
+    // .partitionBy(new EdgePartitioner(numParts))
+    //   .saveAsTextFile(partOutPath)
+
     // var graph = rawGraph.outerJoinVertices(rawGraph.degrees){   case (id, partId , Some(deg)) =>
     //   (partId, deg)
     // }
@@ -127,8 +152,7 @@ object Partition {
               Map(triplet.dstAttr._1 -> 1)
             )
           },
-          (a, b) => a ++ b.map{ case (k,v) => k -> (v + a.getOrElse(k,0)) }
-
+          (a, b) => a ++ b.map { case (k, v) => k -> (v + a.getOrElse(k, 0)) }
         )
         .map(v => {
           val neighLabelFreq =
@@ -144,7 +168,8 @@ object Partition {
             )
           (v._1, neighLabelScore)
           // (v._1, neighLabelScore + (0-> (neighLabelScore.getOrElse(0,0.0) + 1*(v._2._2._1 /(50*v._2._2._2)-1.0))))
-        }).cache()
+        })
+        .cache()
 
       val tempGraph = graph.outerJoinVertices(edgeInfo) {
         case (id, oldPartId, Some(eInfo)) =>
@@ -204,18 +229,22 @@ object Partition {
       graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
     val largestCCIndex =
       rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
-    val coreGraph = rawCoreGraph.subgraph(vpred = (id,attr) => attr == largestCCIndex)
+    val coreGraph =
+      rawCoreGraph.subgraph(vpred = (id, attr) => attr == largestCCIndex)
     coreGraph.vertices
       .map { case (id, _) => id.toString + " 0" }
       .coalesce(1)
       .saveAsTextFile(coreOutPath)
-    val partGraph = graph.outerJoinVertices(coreGraph.vertices) { (id, oldAttr, outDegOpt) =>
-      outDegOpt match {
-        case Some(outDeg) => 0
-        case None => 1 
-      }}
-    partGraph.subgraph(vpred = (id,attr) => attr == 1)
-      .edges 
+    val partGraph = graph.outerJoinVertices(coreGraph.vertices) {
+      (id, oldAttr, outDegOpt) =>
+        outDegOpt match {
+          case Some(outDeg) => 0
+          case None         => 1
+        }
+    }
+    partGraph
+      .subgraph(vpred = (id, attr) => attr == 1)
+      .edges
       .map(e => e.srcId.toString + " " + e.dstId.toString)
       // .coalesce(1)
       .saveAsTextFile(partOutPath)
