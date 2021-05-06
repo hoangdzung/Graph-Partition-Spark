@@ -3,6 +3,7 @@ package dfep
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.sql.SparkSession
 import scala.collection.Map
 import scala.util.Random
@@ -14,7 +15,7 @@ object Partition {
 
     val spark = SparkSession.builder
       .appName(s"${this.getClass.getSimpleName}")
-      // .config("spark.master", "local")
+      .config("spark.master", "local")
       .getOrCreate()
 
     import spark.implicits._
@@ -72,6 +73,7 @@ object Partition {
       else
         (1 + Random.nextInt(numParts), attr)
     })
+    graph.cache()
     // var graph = rawGraph.outerJoinVertices(rawGraph.degrees){   case (id, partId , Some(deg)) =>
     //   (partId, deg)
     // }
@@ -113,22 +115,24 @@ object Partition {
         .filter(x => x.srcAttr._1 != x.dstAttr._1)
         .count()
       println("Num edge-cut all:", nCut2)
+      val stime1 = System.currentTimeMillis
 
       val edgeInfo = graph
-        .aggregateMessages[(List[Int], (Double, Int))](
+        .aggregateMessages[Map[Int, Int]](
           triplet => {
             triplet.sendToDst(
-              (List[Int](triplet.srcAttr._1), (triplet.srcAttr._2, 1))
+              Map(triplet.srcAttr._1 -> 1)
             )
             triplet.sendToSrc(
-              (List[Int](triplet.dstAttr._1), (triplet.dstAttr._2, 1))
+              Map(triplet.dstAttr._1 -> 1)
             )
           },
-          (a, b) => (a._1 ++ b._1, (a._2._1 + b._2._1, a._2._2 + b._2._2))
+          (a, b) => a ++ b.map{ case (k,v) => k -> (v + a.getOrElse(k,0)) }
+
         )
         .map(v => {
           val neighLabelFreq =
-            v._2._1.groupBy(identity).mapValues(x => x.size.toDouble)
+            v._2
           val neighLabelScore = neighLabelFreq
             .map(x =>
               (
@@ -140,7 +144,7 @@ object Partition {
             )
           (v._1, neighLabelScore)
           // (v._1, neighLabelScore + (0-> (neighLabelScore.getOrElse(0,0.0) + 1*(v._2._2._1 /(50*v._2._2._2)-1.0))))
-        })
+        }).cache()
 
       val tempGraph = graph.outerJoinVertices(edgeInfo) {
         case (id, oldPartId, Some(eInfo)) =>
@@ -162,6 +166,10 @@ object Partition {
         .toMap
       val migrationProbabilities =
         demand.map(x => (x._1, (maxSize(x._1) - partSize(x._1)) / x._2))
+      println(
+        s"Step1 = ${(System.currentTimeMillis - stime1) / 1000.0}"
+      )
+      val stime2 = System.currentTimeMillis
 
       graph = tempGraph.mapVertices((id, attr) => {
         if (attr._1._1 == attr._1._2)
@@ -173,9 +181,14 @@ object Partition {
             (attr._1._1, attr._2)
         }
       })
+      graph.cache()
+
       val curScore = tempGraph.vertices.map(x => x._2._3).reduce(_ + _)
       val progress = Math.abs(1.0 - 1.0 * curScore / bestScore)
       println("progress:", progress)
+      println(
+        s"Step2 = ${(System.currentTimeMillis - stime2) / 1000.0}"
+      )
       if (progress < convergenceThreshold) {
         stop = true
       } else {
@@ -204,7 +217,7 @@ object Partition {
     partGraph.subgraph(vpred = (id,attr) => attr == 1)
       .edges 
       .map(e => e.srcId.toString + " " + e.dstId.toString)
-      .coalesce(1)
+      // .coalesce(1)
       .saveAsTextFile(partOutPath)
     spark.stop()
   }
