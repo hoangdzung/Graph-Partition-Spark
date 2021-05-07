@@ -2,11 +2,22 @@ package dfep
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SaveMode
 import scala.collection.Map
 import scala.util.Random
 import scala.math.exp
+
+class EdgePartitioner(override val numPartitions: Int) extends Partitioner {
+  def getPartition(key: Any): Int = key match {
+    case s: Int => {
+      s - 1
+    }
+  }
+}
 
 object Partition {
 
@@ -29,8 +40,9 @@ object Partition {
     val lambdaEdge = args(6).toDouble
     var lambdaRank = args(7).toDouble
     val convergenceThreshold = args(8).toDouble
-    val coreOutPath = args(9)
-    val partOutPath = args(10)
+    val maxStep = args(9).toInt
+    val coreOutPath = args(10)
+    val partOutPath = args(11)
     // val vertex2part = sc
     //   .textFile(partFileName)
     //   .map(line => {
@@ -52,17 +64,21 @@ object Partition {
     var scoreGraph: Graph[Double, Double] =
       if (scoreStrategy == "pagerank")
         rawGraph.pageRank(0.0001)
-      else
+      else if (scoreStrategy == "degree")
         rawGraph
           .outerJoinVertices(rawGraph.degrees) { case (id, _, Some(deg)) =>
             1.0 * deg
           }
           .mapEdges(e => 1.0)
+      else 
+        rawGraph
+          .mapVertices((_,_) => Random.nextDouble())
+          .mapEdges(e => 1.0)        
     val lowerBoundScores = scoreGraph.vertices
       .map { case (id, attr) =>
         attr
       }
-      .top((2 * coreRate * numNodes).toInt)
+      .top((3 * coreRate * numNodes).toInt)
     val lowerBoundScore = lowerBoundScores(lowerBoundScores.size - 1)
     println(lowerBoundScore)
 
@@ -72,6 +88,22 @@ object Partition {
       else
         (1 + Random.nextInt(numParts), attr)
     })
+    graph.cache()
+    // graph.triplets.flatMap(x => {
+    //   if (x.srcAttr._1 == 0 && x.dstAttr._1 ==0 )
+    //     (1 to numParts).map(i => (i, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 != 0 && x.dstAttr._1 ==0)
+    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 == 0 && x.dstAttr._1 !=0)
+    //     Array((x.dstAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else if (x.srcAttr._1 == x.dstAttr._1 )
+    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+    //   else
+    //     Array[(String, String)]()
+    // })
+    // .partitionBy(new EdgePartitioner(numParts))
+    //   .saveAsTextFile(partOutPath)
+
     // var graph = rawGraph.outerJoinVertices(rawGraph.degrees){   case (id, partId , Some(deg)) =>
     //   (partId, deg)
     // }
@@ -79,7 +111,7 @@ object Partition {
     var stop = false
     var step = 0
     var bestScore = 0.0
-    while (step < 200 & !stop) {
+    while (step < maxStep & !stop) {
       val partSize = graph.vertices
         .map { case (id, attr) => (attr._1, 0) }
         .countByKey()
@@ -113,22 +145,23 @@ object Partition {
         .filter(x => x.srcAttr._1 != x.dstAttr._1)
         .count()
       println("Num edge-cut all:", nCut2)
+      val stime1 = System.currentTimeMillis
 
       val edgeInfo = graph
-        .aggregateMessages[(List[Int], (Double, Int))](
+        .aggregateMessages[Map[Int, Int]](
           triplet => {
             triplet.sendToDst(
-              (List[Int](triplet.srcAttr._1), (triplet.srcAttr._2, 1))
+              Map(triplet.srcAttr._1 -> 1)
             )
             triplet.sendToSrc(
-              (List[Int](triplet.dstAttr._1), (triplet.dstAttr._2, 1))
+              Map(triplet.dstAttr._1 -> 1)
             )
           },
-          (a, b) => (a._1 ++ b._1, (a._2._1 + b._2._1, a._2._2 + b._2._2))
+          (a, b) => a ++ b.map { case (k, v) => k -> (v + a.getOrElse(k, 0)) }
         )
         .map(v => {
           val neighLabelFreq =
-            v._2._1.groupBy(identity).mapValues(x => x.size.toDouble)
+            v._2
           val neighLabelScore = neighLabelFreq
             .map(x =>
               (
@@ -141,6 +174,7 @@ object Partition {
           (v._1, neighLabelScore)
           // (v._1, neighLabelScore + (0-> (neighLabelScore.getOrElse(0,0.0) + 1*(v._2._2._1 /(50*v._2._2._2)-1.0))))
         })
+        .cache()
 
       val tempGraph = graph.outerJoinVertices(edgeInfo) {
         case (id, oldPartId, Some(eInfo)) =>
@@ -156,12 +190,17 @@ object Partition {
       tempGraph.cache()
       val demand = tempGraph.vertices
         .map(x => x._2._1)
-        .filter(x => x._1 == x._2)
+        .filter(x => x._1 != x._2)
         .map(x => (x._2, 1))
         .countByKey()
         .toMap
       val migrationProbabilities =
         demand.map(x => (x._1, (maxSize(x._1) - partSize(x._1)) / x._2))
+      println("migrationProbabilities:",migrationProbabilities)
+      println(
+        s"Step1 = ${(System.currentTimeMillis - stime1) / 1000.0}"
+      )
+      val stime2 = System.currentTimeMillis
 
       graph = tempGraph.mapVertices((id, attr) => {
         if (attr._1._1 == attr._1._2)
@@ -173,9 +212,14 @@ object Partition {
             (attr._1._1, attr._2)
         }
       })
+      graph.cache()
+
       val curScore = tempGraph.vertices.map(x => x._2._3).reduce(_ + _)
       val progress = Math.abs(1.0 - 1.0 * curScore / bestScore)
       println("progress:", progress)
+      println(
+        s"Step2 = ${(System.currentTimeMillis - stime2) / 1000.0}"
+      )
       if (progress < convergenceThreshold) {
         stop = true
       } else {
@@ -185,26 +229,34 @@ object Partition {
         }
       }
       println("=========================================")
+      step = step + 1
     }
 
     val rawCoreGraph =
       graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
+    rawCoreGraph.cache()
     val largestCCIndex =
       rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
-    val coreGraph = rawCoreGraph.subgraph(vpred = (id,attr) => attr == largestCCIndex)
+    val coreGraph =
+      rawCoreGraph.subgraph(vpred = (id, attr) => attr == largestCCIndex)
+    coreGraph.cache()
+    println("Reduce from "+rawCoreGraph.numVertices.toString + " nodes to "+ coreGraph.numVertices.toString + " nodes")
     coreGraph.vertices
       .map { case (id, _) => id.toString + " 0" }
       .coalesce(1)
       .saveAsTextFile(coreOutPath)
-    val partGraph = graph.outerJoinVertices(coreGraph.vertices) { (id, oldAttr, outDegOpt) =>
-      outDegOpt match {
-        case Some(outDeg) => 0
-        case None => 1 
-      }}
-    partGraph.subgraph(vpred = (id,attr) => attr == 1)
-      .edges 
+    val partGraph = graph.outerJoinVertices(coreGraph.vertices) {
+      (id, oldAttr, outDegOpt) =>
+        outDegOpt match {
+          case Some(outDeg) => 0
+          case None         => 1
+        }
+    }
+    partGraph
+      .subgraph(vpred = (id, attr) => attr == 1)
+      .edges
       .map(e => e.srcId.toString + " " + e.dstId.toString)
-      .coalesce(1)
+      // .coalesce(1)
       .saveAsTextFile(partOutPath)
     spark.stop()
   }
