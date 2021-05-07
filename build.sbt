@@ -1,4 +1,4 @@
-name := "PARTTEST"
+name := "PART"
 mainClass := Some("dfep.Partition")
 
 scalaVersion := "2.12.10"

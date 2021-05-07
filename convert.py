@@ -16,23 +16,27 @@ args = parser.parse_args()
 adj_list = defaultdict(set)
 n_edges = 0
 node2id = {}
-for line in tqdm(open(args.part), desc='Read part graph'):
-    node1, node2 = line.strip().split()
-    if node1 == node2:
+assert os.path.isdir(args.part)
+for pfile in tqdm(os.listdir(args.part), desc='Read part graph'):
+    if not  pfile.startswith('part'):
         continue
-    if node2 in adj_list[node1]:
-        continue
-    n_edges += 1
-    adj_list[node1].add(node2)
-    adj_list[node2].add(node1)
-    try:
-        idx = node2id[node1]
-    except:
-        node2id[node1] = len(node2id)
-    try:
-        idx = node2id[node2]
-    except:
-        node2id[node2] = len(node2id)
+    for line in open(os.path.join(args.part,  pfile)):
+        node1, node2 = line.strip().split()
+        if node1 == node2:
+            continue
+        if node2 in adj_list[node1]:
+            continue
+        n_edges += 1
+        adj_list[node1].add(node2)
+        adj_list[node2].add(node1)
+        try:
+            idx = node2id[node1]
+        except:
+            node2id[node1] = len(node2id)
+        try:
+            idx = node2id[node2]
+        except:
+            node2id[node2] = len(node2id)
 
 n_nodes = len(adj_list)
 id2node = {idx: node for node,idx in node2id.items()}
