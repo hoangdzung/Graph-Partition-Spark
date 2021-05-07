@@ -40,8 +40,9 @@ object Partition {
     val lambdaEdge = args(6).toDouble
     var lambdaRank = args(7).toDouble
     val convergenceThreshold = args(8).toDouble
-    val coreOutPath = args(9)
-    val partOutPath = args(10)
+    val maxStep = args(9).toInt
+    val coreOutPath = args(10)
+    val partOutPath = args(11)
     // val vertex2part = sc
     //   .textFile(partFileName)
     //   .map(line => {
@@ -63,17 +64,21 @@ object Partition {
     var scoreGraph: Graph[Double, Double] =
       if (scoreStrategy == "pagerank")
         rawGraph.pageRank(0.0001)
-      else
+      else if (scoreStrategy == "degree")
         rawGraph
           .outerJoinVertices(rawGraph.degrees) { case (id, _, Some(deg)) =>
             1.0 * deg
           }
           .mapEdges(e => 1.0)
+      else 
+        rawGraph
+          .mapVertices((_,_) => Random.nextDouble())
+          .mapEdges(e => 1.0)        
     val lowerBoundScores = scoreGraph.vertices
       .map { case (id, attr) =>
         attr
       }
-      .top((2 * coreRate * numNodes).toInt)
+      .top((3 * coreRate * numNodes).toInt)
     val lowerBoundScore = lowerBoundScores(lowerBoundScores.size - 1)
     println(lowerBoundScore)
 
@@ -106,7 +111,7 @@ object Partition {
     var stop = false
     var step = 0
     var bestScore = 0.0
-    while (step < 200 & !stop) {
+    while (step < maxStep & !stop) {
       val partSize = graph.vertices
         .map { case (id, attr) => (attr._1, 0) }
         .countByKey()
@@ -185,12 +190,13 @@ object Partition {
       tempGraph.cache()
       val demand = tempGraph.vertices
         .map(x => x._2._1)
-        .filter(x => x._1 == x._2)
+        .filter(x => x._1 != x._2)
         .map(x => (x._2, 1))
         .countByKey()
         .toMap
       val migrationProbabilities =
         demand.map(x => (x._1, (maxSize(x._1) - partSize(x._1)) / x._2))
+      println("migrationProbabilities:",migrationProbabilities)
       println(
         s"Step1 = ${(System.currentTimeMillis - stime1) / 1000.0}"
       )
@@ -223,14 +229,18 @@ object Partition {
         }
       }
       println("=========================================")
+      step = step + 1
     }
 
     val rawCoreGraph =
       graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
+    rawCoreGraph.cache()
     val largestCCIndex =
       rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
     val coreGraph =
       rawCoreGraph.subgraph(vpred = (id, attr) => attr == largestCCIndex)
+    coreGraph.cache()
+    println("Reduce from "+rawCoreGraph.numVertices.toString + " nodes to "+ coreGraph.numVertices.toString + " nodes")
     coreGraph.vertices
       .map { case (id, _) => id.toString + " 0" }
       .coalesce(1)
