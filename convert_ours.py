@@ -51,17 +51,22 @@ with open(outgraph, 'w') as f:
         f.write(data) 
 subprocess.call(['gpmetis', outgraph, str(args.npart)])
 node2part = {}
+n_core = 0
 for line in tqdm(open(args.core),desc="Read core graph"):
     node, part = line.strip().split()
     node2part[node] = 0
+    n_core += 1
 
+part2nnodes = {}
 for idx,line in tqdm(enumerate(open(outgraph+'.part.'+str(args.npart))),desc="Read metis out"):
     part = int(line.strip())
     node2part[id2node[idx]] = part + 1
+    part2nnodes[part+1] = part2nnodes.get(part+1, 0) + 1
 
 part2edges = defaultdict(list)
 n_cut = 0
 n_miss_node = 0
+core2deg = {}
 for line in tqdm(open(args.whole), desc="Read all edges"):
     node1, node2 = line.strip().split()
     try:
@@ -78,6 +83,10 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
         n_miss_node += 1
 
     part1, part2 = node2part[node1], node2part[node2]
+    if part1 ==0:
+        core2deg[node1] = core2deg.get(node1, 0) + 1
+    if part2 ==0:
+        core2deg[node2] = core2deg.get(node2, 0) + 1
     if part1 == 0 and part2 == 0:
         for i in range(1, args.npart+1):
             part2edges[i].append(line)
@@ -114,4 +123,8 @@ for p, edges in part2edges.items():
             f.write(edge)
 os.remove(outgraph)
 os.remove(outgraph+'.part.'+str(args.npart))
-print("Ncut:",n_cut, "N_miss_node:",n_miss_node)
+print("Ncore: ", n_core)
+print("Ncut: ",n_cut),
+print("Avg core deg: ", np.means(list(core2deg.values())))
+print("N_miss_node: ",n_miss_node)
+print("Part size: ", [i for i in part2nnodes.values()] )

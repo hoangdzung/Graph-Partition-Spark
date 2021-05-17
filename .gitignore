@@ -8,3 +8,4 @@ coreout
 finalout
 dummy
 src/main/scala/Test.scala
+log/*
