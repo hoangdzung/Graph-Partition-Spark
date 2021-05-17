@@ -4,65 +4,29 @@ from tqdm import tqdm
 import random 
 import subprocess
 import os 
-import numpy as np 
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('whole')
-parser.add_argument('core')
 parser.add_argument('part')
-parser.add_argument('npart',type=int)
 parser.add_argument('--out')
 args = parser.parse_args()
 
 adj_list = defaultdict(set)
 n_edges = 0
-node2id = {}
+node2part = {}
+part2nodes = defaultdict(list)
 assert os.path.isdir(args.part)
 for pfile in tqdm(os.listdir(args.part), desc='Read part graph'):
     if not  pfile.startswith('part'):
         continue
     for line in open(os.path.join(args.part,  pfile)):
-        node1, node2 = line.strip().split()
-        if node1 == node2:
-            continue
-        if node2 in adj_list[node1]:
-            continue
-        n_edges += 1
-        adj_list[node1].add(node2)
-        adj_list[node2].add(node1)
-        try:
-            idx = node2id[node1]
-        except:
-            node2id[node1] = len(node2id)
-        try:
-            idx = node2id[node2]
-        except:
-            node2id[node2] = len(node2id)
+        node, part = line.strip().split()
+        node, part = int(node), int(part)
+        node2part[node] = part 
+        part2nodes[part].append(node)
 
-n_nodes = len(adj_list)
-id2node = {idx: node for node,idx in node2id.items()}
-outgraph = str(random.random())
-with open(outgraph, 'w') as f:
-    f.write("{} {} 000\n".format(n_nodes, n_edges))
-    for i in tqdm(range(n_nodes), desc="Write metis"):
-        data = ""
-        for neigh in adj_list[id2node[i]]:
-            data += " " + str(node2id[neigh] + 1)
-        data = data.strip() + '\n'
-        f.write(data) 
-subprocess.call(['gpmetis', outgraph, str(args.npart)])
-node2part = {}
-n_core = 0
-for line in tqdm(open(args.core),desc="Read core graph"):
-    node, part = line.strip().split()
-    node2part[node] = 0
-    n_core += 1
-
-part2nnodes = {}
-for idx,line in tqdm(enumerate(open(outgraph+'.part.'+str(args.npart))),desc="Read metis out"):
-    part = int(line.strip())
-    node2part[id2node[idx]] = part + 1
-    part2nnodes[part+1] = part2nnodes.get(part+1, 0) + 1
+n_core = len(part2nodes[0])
 
 part2edges = defaultdict(list)
 n_cut = 0
@@ -123,10 +87,9 @@ if args.out is not None:
         with open(args.out+'_{}.txt'.format(p-1),'w') as f:
             for edge in tqdm(edges,desc="Write part {}".format(p)):
                 f.write(edge)
-os.remove(outgraph)
-os.remove(outgraph+'.part.'+str(args.npart))
+
 print("Ncore: ", n_core)
 print("Ncut: ",n_cut),
 print("Avg core deg: ", np.mean(list(core2deg.values())))
 print("N_miss_node: ",n_miss_node)
-print("Part size: ", [i for i in part2nnodes.values()] )
+print("Part size: ", [i for i in part2nodes.values()] )
