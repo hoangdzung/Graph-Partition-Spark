@@ -10,7 +10,7 @@ parser.add_argument('whole')
 parser.add_argument('core')
 parser.add_argument('part')
 parser.add_argument('npart',type=int)
-parser.add_argument('out')
+parser.add_argument('--out')
 args = parser.parse_args()
 
 adj_list = defaultdict(set)
