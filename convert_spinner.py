@@ -16,16 +16,22 @@ adj_list = defaultdict(set)
 n_edges = 0
 node2part = {}
 part2nodes = defaultdict(list)
-assert os.path.isdir(args.part)
-for pfile in tqdm(os.listdir(args.part), desc='Read part graph'):
-    if not  pfile.startswith('part'):
-        continue
-    for line in open(os.path.join(args.part,  pfile)):
-        node, part = line.strip().split()
-        node, part = int(node), int(part)
+assert os.path.exists(args.part)
+if os.path.isdir(args.part):
+    for pfile in tqdm(os.listdir(args.part), desc='Read part graph'):
+        if not  pfile.startswith('part'):
+            continue
+        for line in open(os.path.join(args.part,  pfile)):
+            node, part = line.strip().split()
+            part = int(part)
+            node2part[node] = part 
+            part2nodes[part].append(node)
+else:
+    for node, part in enumerate(open(args.part),desc='Read part graph' ):
+        part = int(part)
         node2part[node] = part 
         part2nodes[part].append(node)
-
+        
 n_core = len(part2nodes[0])
 npart = len(part2nodes) - 1
 part2edges = defaultdict(list)
