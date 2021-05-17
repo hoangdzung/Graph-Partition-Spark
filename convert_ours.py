@@ -110,17 +110,18 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
         
     else:
         n_cut +=1
-try:
-    outdir = "/".join(args.out.split("/")[:-1])
-    if not os.path.isdir(outdir):
-        os.makedirs(outdir)
-except:
-    pass 
+if args.out is not None:
+    try:
+        outdir = "/".join(args.out.split("/")[:-1])
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir)
+    except:
+        pass 
 
-for p, edges in part2edges.items():
-    with open(args.out+'_{}.txt'.format(p-1),'w') as f:
-        for edge in tqdm(edges,desc="Write part {}".format(p)):
-            f.write(edge)
+    for p, edges in part2edges.items():
+        with open(args.out+'_{}.txt'.format(p-1),'w') as f:
+            for edge in tqdm(edges,desc="Write part {}".format(p)):
+                f.write(edge)
 os.remove(outgraph)
 os.remove(outgraph+'.part.'+str(args.npart))
 print("Ncore: ", n_core)
