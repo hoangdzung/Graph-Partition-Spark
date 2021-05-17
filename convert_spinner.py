@@ -92,4 +92,4 @@ print("Ncore: ", n_core)
 print("Ncut: ",n_cut),
 print("Avg core deg: ", np.mean(list(core2deg.values())))
 print("N_miss_node: ",n_miss_node)
-print("Part size: ", [i for i in part2nodes.values()] )
+print("Part size: ", [len(i) for i in part2nodes.values()] )
