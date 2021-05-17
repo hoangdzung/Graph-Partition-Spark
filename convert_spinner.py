@@ -27,7 +27,7 @@ for pfile in tqdm(os.listdir(args.part), desc='Read part graph'):
         part2nodes[part].append(node)
 
 n_core = len(part2nodes[0])
-
+npart = len(part2nodes) - 1
 part2edges = defaultdict(list)
 n_cut = 0
 n_miss_node = 0
@@ -53,22 +53,22 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
     if part2 ==0:
         core2deg[node2] = core2deg.get(node2, 0) + 1
     if part1 == 0 and part2 == 0:
-        for i in range(1, args.npart+1):
+        for i in range(1, npart+1):
             part2edges[i].append(line)
     elif part1 != 0 and part2 ==0:
         if part1 == -1:
-            part1 = random.randint(1,args.npart)
+            part1 = random.randint(1,npart)
             node2part[node1] = part1 
         part2edges[part1].append(line)  
     elif part2 != 0 and part1 ==0:
         if part2 == -1:
-            part2 = random.randint(1,args.npart)
+            part2 = random.randint(1,npart)
             node2part[node2] = part2 
         part2edges[part2].append(line)
 
     elif part2 == part1:
         if part1 == -1:
-            part1 = random.randint(1,args.npart)
+            part1 = random.randint(1,npart)
             node2part[node1] = part1 
             node2part[node2] = part1 
         part2edges[part1].append(line)
