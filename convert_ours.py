@@ -12,6 +12,7 @@ parser.add_argument('core')
 parser.add_argument('part')
 parser.add_argument('npart',type=int)
 parser.add_argument('--out')
+parser.add_argument('--feats')
 args = parser.parse_args()
 
 adj_list = defaultdict(set)
@@ -58,11 +59,11 @@ for line in tqdm(open(args.core),desc="Read core graph"):
     node2part[node] = 0
     n_core += 1
 
-part2nnodes = {}
+part2nodes = defaultdict(list)
 for idx,line in tqdm(enumerate(open(outgraph+'.part.'+str(args.npart))),desc="Read metis out"):
     part = int(line.strip())
     node2part[id2node[idx]] = part + 1
-    part2nnodes[part+1] = part2nnodes.get(part+1, 0) + 1
+    part2nodes[part+1].append(id2node[idx])
 
 part2edges = defaultdict(list)
 n_cut = 0
@@ -118,7 +119,13 @@ if args.out is not None:
             os.makedirs(outdir)
     except:
         pass 
-
+    if args.feats is not None:
+        for node, feat in tqdm(enumerate(open(args.feat)), desc="Read feat"):
+            feats[str(node)] = np.array(list(map(float,feat.split())))
+        for p, nodes in part2nodes.items():
+            with open(args.out+'_{}.txt.feat'.format(p-1),'w') as f:
+                for node in tqdm(nodes+part2nodes[0],desc="Write feat {}".format(p)):
+                    f.write("{} {}\n".format(node, " ".join(map(str, feats[node]))))
     for p, edges in part2edges.items():
         with open(args.out+'_{}.txt'.format(p-1),'w') as f:
             for edge in tqdm(edges,desc="Write part {}".format(p)):
@@ -129,4 +136,4 @@ print("Ncore: ", n_core)
 print("Ncut: ",n_cut),
 print("Avg core deg: ", np.mean(list(core2deg.values())))
 print("N_miss_node: ",n_miss_node)
-print("Part size: ", [i for i in part2nnodes.values()] )
+print("Part size: ", [len(i) for i in part2nodes.values()] )
