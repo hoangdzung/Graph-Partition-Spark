@@ -96,11 +96,13 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
         if part1 == -1:
             part1 = random.randint(1,args.npart)
             node2part[node1] = part1 
+            part2nodes[part1].append(node1)
         part2edges[part1].append(line)  
     elif part2 != 0 and part1 ==0:
         if part2 == -1:
             part2 = random.randint(1,args.npart)
             node2part[node2] = part2 
+            part2nodes[part2].append(node2)
         part2edges[part2].append(line)
 
     elif part2 == part1:
@@ -108,6 +110,8 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
             part1 = random.randint(1,args.npart)
             node2part[node1] = part1 
             node2part[node2] = part1 
+            part2nodes[part1].append(node1)
+            part2nodes[part1].append(node2)
         part2edges[part1].append(line)
         
     else:
