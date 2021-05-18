@@ -112,24 +112,21 @@ for line in tqdm(open(args.whole), desc="Read all edges"):
         
     else:
         n_cut +=1
-if args.out is not None:
-    try:
-        outdir = "/".join(args.out.split("/")[:-1])
-        if not os.path.isdir(outdir):
-            os.makedirs(outdir)
-    except:
-        pass 
+if args.outdir is not None:
+    if not os.path.isdir(args.outdir):
+        os.makedirs(args.outdir)
+
     if args.feats is not None:
         feats = {}
         for node, feat in tqdm(enumerate(open(args.feats)), desc="Read feat"):
             feats[str(node)] = np.array(list(map(float,feat.split())))
         corenodes =  part2nodes[0]
         for p, nodes in part2nodes.items():
-            with open(args.out+'_{}.txt.feat'.format(p-1),'w') as f:
+            with open(os.path.join(args.outdir,'part_{}.txt.feat'.format(p-1)),'w') as f:
                 for node in tqdm(nodes+corenodes,desc="Write feat {}".format(p)):
                     f.write("{} {}\n".format(node, " ".join(map(str, feats[node]))))
     for p, edges in part2edges.items():
-        with open(args.out+'_{}.txt'.format(p-1),'w') as f:
+        with open(os.path.join(args.outdir,'part_{}.txt'.format(p-1)),'w') as f:
             for edge in tqdm(edges,desc="Write part {}".format(p)):
                 f.write(edge)
 os.remove(outgraph)

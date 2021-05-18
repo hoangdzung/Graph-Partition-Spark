@@ -27,8 +27,9 @@ if os.path.isdir(args.part):
             node2part[node] = part 
             part2nodes[part].append(node)
 else:
-    for node, part in enumerate(open(args.part),desc='Read part graph' ):
+    for node, part in tqdm(enumerate(open(args.part)),desc='Read part graph' ):
         part = int(part)
+        node = str(node)
         node2part[node] = part 
         part2nodes[part].append(node)
         
