@@ -53,13 +53,13 @@ with open(outgraph, 'w') as f:
         f.write(data) 
 subprocess.call(['gpmetis', outgraph, str(args.npart)])
 node2part = {}
-n_core = 0
+
+part2nodes = defaultdict(list)
 for line in tqdm(open(args.core),desc="Read core graph"):
     node, part = line.strip().split()
     node2part[node] = 0
-    n_core += 1
+    part2nodes[0].append(node)
 
-part2nodes = defaultdict(list)
 for idx,line in tqdm(enumerate(open(outgraph+'.part.'+str(args.npart))),desc="Read metis out"):
     part = int(line.strip())
     node2part[id2node[idx]] = part + 1
@@ -120,11 +120,13 @@ if args.out is not None:
     except:
         pass 
     if args.feats is not None:
-        for node, feat in tqdm(enumerate(open(args.feat)), desc="Read feat"):
+        feats = {}
+        for node, feat in tqdm(enumerate(open(args.feats)), desc="Read feat"):
             feats[str(node)] = np.array(list(map(float,feat.split())))
+        corenodes =  part2nodes[0]
         for p, nodes in part2nodes.items():
             with open(args.out+'_{}.txt.feat'.format(p-1),'w') as f:
-                for node in tqdm(nodes+part2nodes[0],desc="Write feat {}".format(p)):
+                for node in tqdm(nodes+corenodes,desc="Write feat {}".format(p)):
                     f.write("{} {}\n".format(node, " ".join(map(str, feats[node]))))
     for p, edges in part2edges.items():
         with open(args.out+'_{}.txt'.format(p-1),'w') as f:
@@ -132,7 +134,7 @@ if args.out is not None:
                 f.write(edge)
 os.remove(outgraph)
 os.remove(outgraph+'.part.'+str(args.npart))
-print("Ncore: ", n_core)
+print("Ncore: ", len(part2nodes[0]))
 print("Ncut: ",n_cut),
 print("Avg core deg: ", np.mean(list(core2deg.values())))
 print("N_miss_node: ",n_miss_node)
