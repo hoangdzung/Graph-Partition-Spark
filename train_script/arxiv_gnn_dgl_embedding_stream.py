@@ -29,8 +29,8 @@ except ImportError:
 
 EPS = 1e-15
 
-EPOCHS=5
-FANOUTS=[10,25]
+EPOCHS=1
+FANOUTS=[5,10]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device =  'cpu'
 s3 = boto3.resource('s3')
@@ -178,12 +178,12 @@ class CrossEntropyLoss(nn.Module):
         loss = F.binary_cross_entropy_with_logits(score, label.float())
         return loss
 
-feats = {}
-for node, feat in enumerate(smart_open.open("s3://graphframes-sh2/data/ogbn-arxiv_text/features.txt")):
-    feats[node] = np.array(list(map(float,feat.split())))
-
 for line in sys.stdin:
     path = line.strip()
+    feats = {}
+    for line in smart_open.open(path+".feat"):
+        node, feat = line.strip().split(" ",1)
+        feats[int(node)] = np.array(list(map(float,feat.split())))    
     node2id = dict()
     edge_list = set()
     X = []
@@ -224,9 +224,10 @@ for line in sys.stdin:
         dataloader = dgl.dataloading.EdgeDataLoader(
             G, train_seeds, sampler, 
             negative_sampler=NegativeSampler(G, 1),
-            batch_size=1000,
+            batch_size=2000,
             shuffle=True,
-            drop_last=False)
+            drop_last=False,
+            num_workers=12)
             # pin_memory=True)
             
         nfeat =  torch.tensor(X,dtype=torch.float)

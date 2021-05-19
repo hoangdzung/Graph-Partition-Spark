@@ -10,7 +10,7 @@ import smart_open
 
 EPS = 1e-15
 
-EPOCHS=0
+EPOCHS=1
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device = torch.device('cpu')
     
@@ -49,10 +49,10 @@ for line in sys.stdin:
 
         data = Data(edge_index=edge_index)
 
-        model = Node2Vec(data.edge_index, embedding_dim=128, walk_length=80,
-                 context_size=20, walks_per_node=10, sparse=True).to(device)
+        model = Node2Vec(data.edge_index, embedding_dim=128, walk_length=4,
+                 context_size=2, walks_per_node=2, sparse=True).to(device)
 
-        loader = model.loader(batch_size=128, shuffle=True, num_workers=1)
+        loader = model.loader(batch_size=2000, shuffle=True, num_workers=12)
         optimizer = torch.optim.SparseAdam(model.parameters(), lr=0.01)
 
         for epoch in range(EPOCHS):
