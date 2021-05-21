@@ -11,3 +11,6 @@ dummy
 src/main/scala/Test.scala
 log/*
 train_script/project
+test.out 
+datapart
+0.001_2_5part
