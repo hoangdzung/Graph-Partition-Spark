@@ -1,14 +1,12 @@
 #!/bin/bash
-# sudo yum install -y python3-devel 
 sudo pip3 install gensim==3.8.3
 sudo pip3 install scikit-learn==0.22
 sudo pip3 install  networkx 
-sudo pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
-sudo pip3 install  torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
-sudo pip3 install  torch-sparse -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
-sudo pip3 install  torch-cluster -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
-sudo pip3 install  torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
-sudo pip3 install dgl
+sudo pip3 install torch==1.6.0+cu92 torchvision==0.7.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html
+sudo pip3 install  torch-scatter==2.0.5+cu92 -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+sudo pip3 install  torch-sparse==0.6.7+cu92 -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+sudo pip3 install  torch-cluster==1.5.7+cu92 -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+sudo pip3 install  torch-spline-conv==1.2.0+cu92 -f https://pytorch-geometric.com/whl/torch-1.6.0.html
 sudo pip3 install  pytest-runner
 sudo pip3 install  numba==0.50.1
 sudo pip3 install boto3
