@@ -10,54 +10,44 @@ import smart_open
 import subprocess
 import re 
 import os 
+import boto3
+import sys 
 
 EPS = 1e-15
 
 EPOCHS=5
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device = torch.device('cpu')
-    
+s3 = boto3.resource('s3')
+bucket = s3.Bucket('graphframes-sh2')
+
 def check_file(name):
-    if name in os.listdir('/home/hadoop'):
+    if name in os.listdir('/mnt/tmp'):
         return True, True
     else:
-        args = "hdfs dfs -ls | awk '{print $8}'"
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        s_output, s_err = proc.communicate()
-        all_dart_dirs = s_output.split()
-        return name in all_dart_dirs, False
+        ckpt_files = [i for i in bucket.objects.filter(Prefix='ckpt')]
+        return name in ckpt_files, False
 
-def copy_from_local(local, shared):
-    put = subprocess.Popen(["sudo", "hdfs", "dfs", "-copyToLocal", local, shared], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
-    s_output, s_err = put.communicate()
-    return put.returncode == 0, s_output, s_err
+def copy_from_local(local_ckpt_path, shared_ckpt_path):
+    s3.meta.client.upload_file(local_ckpt_path, 'graphframes-sh2', shared_ckpt_path)
 
-def copy_to_local(shared, local):
-    get = subprocess.Popen(["sudo", "hdfs", "dfs", "-copyFromLocal", shared, local], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
-    s_output, s_err = get.communicate()
-    return put.returncode == 0, s_output, s_err
+def copy_to_local(shared_ckpt_path, local_ckpt_path):
+    s3.meta.client.download_file(shared_ckpt_path, 'graphframes-sh2', local_ckpt_path)
 
 for line in sys.stdin:
     path = line.strip()
     partid = re.search('(?<=/part_)[0-9]+(?=.txt*)',path).group(0)
-    local_ckpt_path = os.path.join('/mnt/tmp', partid +'.pt')
-    subprocess.call(['touch', '/mnt/tmp/{}_1'.format(partid)])
-    shared_ckpt_path = partid +'.pt'
+    local_ckpt_path = os.path.join('/mnt/tmp', 'ckpt'+partid +'.pt')
+    shared_ckpt_path = 'ckpt'+partid +'.pt'
     exist, is_local = check_file(shared_ckpt_path)
-    subprocess.call(['touch', '/mnt/tmp/{}_2'.format(partid)])
 
     if exist and not is_local:
-        subprocess.call(['touch', '/mnt/tmp/{}_3_pre'.format(partid)])
-        success, s_output, s_err = copy_to_local(shared_ckpt_path, local_ckpt_path)
-        with open('/mnt/tmp/{}_3_{}'.format(partid, success), 'w') as f:
-            f.write("out "+s_output+'\n')
-            f.write("err "+s_err+'\n')
-        # subprocess.call(['touch', '/mnt/tmp/{}_3_{}'.format(partid, success)])
+        copy_to_local(shared_ckpt_path, local_ckpt_path)
+        success = os.path.isfile(local_ckpt_path)
+        subprocess.call(['touch', '/mnt/tmp/{}_copy_to_local_{}'.format(partid, success)])
 
     if exist and (is_local or success):
-        subprocess.call(['touch', '/mnt/tmp/{}_4_pre'.format(partid)])
         node2id, model, curr_epoch = torch.load(local_ckpt_path) 
-        subprocess.call(['touch', '/mnt/tmp/{}_4'.format(partid)])   
     else:
         curr_epoch = -1
         node2id = dict()
@@ -107,13 +97,12 @@ for line in sys.stdin:
             optimizer.step()
             # total_loss += loss.item()
         # total_loss = total_loss / len(loader)
-        subprocess.call(['touch', '/mnt/tmp/{}_4_pre'.format(partid)])
+        subprocess.call(['touch', '/mnt/tmp/{}_train_epoch_{}'.format(partid, epoch)])
         torch.save([node2id, model, epoch], local_ckpt_path)
-        subprocess.call(['touch', '/mnt/tmp/{}_4'.format(partid)])
-        success, s_output, s_err = copy_from_local(local_ckpt_path, shared_ckpt_path)
-        with open('/mnt/tmp/{}_5_{}'.format(partid, success), 'w') as f:
-            f.write("out "+s_output+'\n')
-            f.write("err "+s_err+'\n')
+        copy_from_local(local_ckpt_path, shared_ckpt_path)
+        if not os.path.isfile('/mnt/tmp/{}'.format(partid)):
+            subprocess.call(['touch', '/mnt/tmp/{}_interrupt'.format(partid)])
+            sys.exit(1)
         # subprocess.call(['touch', '/mnt/tmp/{}_5_{}'.format(partid,success)])
 
     model.eval()
@@ -126,3 +115,4 @@ for line in sys.stdin:
     for embedding in embeddings:
         result = str([int(embedding[0])] + embedding[1:].tolist()).replace('[','').replace(']','').replace(',',' ') +'\t'
         print(result)
+    os.remove('/mnt/tmp/{}_interrupt'.format(partid))
