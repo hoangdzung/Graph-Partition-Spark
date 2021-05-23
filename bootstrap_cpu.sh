@@ -23,8 +23,10 @@ aws s3 cp  s3://graphframes-sh2/train_script/n2v_ckpt_torch_embedding_stream.py 
 aws s3 cp  s3://graphframes-sh2/train_script/n2v_gensim_embedding_stream.py /home/hadoop
 aws s3 cp  s3://graphframes-sh2/train_script/arxiv_gnn_rw_dgl_embedding_stream.py /home/hadoop
 aws s3 cp  s3://graphframes-sh2/train_script/arxiv_gnn_dgl_embedding_stream.py /home/hadoop
+aws s3 cp  s3://graphframes-sh2/train_script/save_hdfs.sh /home/hadoop
 chmod 777 /home/hadoop/n2v_torch_embedding_stream.py
 chmod 777 /home/hadoop/n2v_ckpt_torch_embedding_stream.py
 chmod 777 /home/hadoop/n2v_gensim_embedding_stream.py
 chmod 777 /home/hadoop/arxiv_gnn_rw_dgl_embedding_stream.py
 chmod 777 /home/hadoop/arxiv_gnn_dgl_embedding_stream.py
+chmod 777 /home/hadoop/save_hdfs.sh
