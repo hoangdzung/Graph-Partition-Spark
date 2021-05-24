@@ -20,31 +20,46 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device = torch.device('cpu')
 s3 = boto3.resource('s3')
 bucket = s3.Bucket('graphframes-sh2')
+# ROOT_CKPT_DIR = '.'
+ROOT_CKPT_DIR = '/mnt/tmp'
 
-def check_file(name):
-    if name in os.listdir('/mnt/tmp'):
+def check_file(local_ckpt_path, shared_ckpt_path, shared_ckpt_dir):
+    if os.path.isfile(local_ckpt_path):
         return True, True
     else:
-        ckpt_files = [i for i in bucket.objects.filter(Prefix='ckpt')]
-        return name in ckpt_files, False
+        ckpt_files = [i.key for i in bucket.objects.filter(Prefix=shared_ckpt_dir)]
+        return shared_ckpt_path in ckpt_files, False
 
 def copy_from_local(local_ckpt_path, shared_ckpt_path):
-    s3.meta.client.upload_file(local_ckpt_path, 'graphframes-sh2', shared_ckpt_path)
+    bucket.upload_file(local_ckpt_path, shared_ckpt_path)
 
 def copy_to_local(shared_ckpt_path, local_ckpt_path):
-    s3.meta.client.download_file(shared_ckpt_path, 'graphframes-sh2', local_ckpt_path)
+    bucket.download_file(shared_ckpt_path, local_ckpt_path)
 
 for line in sys.stdin:
-    path = line.strip()
-    partid = re.search('(?<=/part_)[0-9]+(?=.txt*)',path).group(0)
-    local_ckpt_path = os.path.join('/mnt/tmp', 'ckpt'+partid +'.pt')
-    shared_ckpt_path = 'ckpt'+partid +'.pt'
-    exist, is_local = check_file(shared_ckpt_path)
+    path, interrupt_epoch = line.strip().split(";")
+    interrupt_epoch = int(interrupt_epoch)
 
+    shared_ckpt_dir = 'checkpoint/'+'/'.join(path.split('/')[-3:-1])+str(interrupt_epoch)
+    local_ckpt_dir = os.path.join(ROOT_CKPT_DIR, shared_ckpt_dir)
+
+    partid = re.search('(?<=/part_)[0-9]+(?=.txt*)',path).group(0)
+    indicator_file = os.path.join(local_ckpt_dir, '{}_interrupt_{}'.format(partid,interrupt_epoch))
+
+    if not os.path.isdir(local_ckpt_dir):
+        os.makedirs(local_ckpt_dir)
+
+    local_ckpt_path = os.path.join(local_ckpt_dir, 'ckpt'+partid +'.pt')
+    shared_ckpt_path = os.path.join(shared_ckpt_dir, 'ckpt'+partid +'.pt')
+
+    exist, is_local = check_file(local_ckpt_path, shared_ckpt_path, shared_ckpt_dir)
+    # subprocess.call(['touch', os.path.join(local_ckpt_dir, '/{}_ckpt_exist_{}_is_local_{}'.format(partid, exist, is_local))])
+
+    success = False
     if exist and not is_local:
         copy_to_local(shared_ckpt_path, local_ckpt_path)
         success = os.path.isfile(local_ckpt_path)
-        subprocess.call(['touch', '/mnt/tmp/{}_copy_to_local_{}'.format(partid, success)])
+        # subprocess.call(['touch', os.path.join(local_ckpt_dir, '/{}_copy_to_local_{}'.format(partid, success))])
 
     if exist and (is_local or success):
         node2id, model, curr_epoch = torch.load(local_ckpt_path) 
@@ -97,13 +112,14 @@ for line in sys.stdin:
             optimizer.step()
             # total_loss += loss.item()
         # total_loss = total_loss / len(loader)
-        subprocess.call(['touch', '/mnt/tmp/{}_train_epoch_{}'.format(partid, epoch)])
+        subprocess.call(['touch', os.path.join(local_ckpt_dir,'{}_train_epoch_{}'.format(partid, epoch))])
+        # subprocess.call(['rm', os.path.join(local_ckpt_dir,'{}_train_epoch_{}'.format(partid, epoch-1))])
         torch.save([node2id, model, epoch], local_ckpt_path)
         copy_from_local(local_ckpt_path, shared_ckpt_path)
-        if not os.path.isfile('/mnt/tmp/{}'.format(partid)):
-            subprocess.call(['touch', '/mnt/tmp/{}_interrupt'.format(partid)])
-            sys.exit(1)
-        # subprocess.call(['touch', '/mnt/tmp/{}_5_{}'.format(partid,success)])
+        
+        if partid == '0' and epoch == interrupt_epoch and not os.path.isfile(indicator_file):
+            subprocess.call(['touch', indicator_file])
+            sys.exit(137)
 
     model.eval()
     out = model().cpu().detach().numpy()
@@ -115,4 +131,5 @@ for line in sys.stdin:
     for embedding in embeddings:
         result = str([int(embedding[0])] + embedding[1:].tolist()).replace('[','').replace(']','').replace(',',' ') +'\t'
         print(result)
-    os.remove('/mnt/tmp/{}_interrupt'.format(partid))
+    # if partid =='0':
+    #     os.remove(CKPT_DIR+'/{}_interrupt'.format(partid))
