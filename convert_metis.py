@@ -29,44 +29,11 @@ npart = len(part2nodes)
 part2edges = defaultdict(list)
 for line in tqdm(open(args.whole), desc="Read all edges"):
     node1, node2 = line.strip().split()
-    try:
-        part1 = node2part[node1]
-    except:
-        part1 = -1
-        node2part[node1] = -1 
-    try:
-        part2 = node2part[node2]
-    except:
-        part2 = -1
-        node2part[node2] = -1
-
     part1, part2 = node2part[node1], node2part[node2]
-    if part1 == 0 and part2 == 0:
-        for i in range(1, npart+1):
-            part2edges[i].append(line)
-    elif part1 != 0 and part2 ==0:
-        if part1 == -1:
-            part1 = random.randint(1,npart)
-            node2part[node1] = part1 
-            part2nodes[part1].add(node1)
-        part2edges[part1].append(line)  
-    elif part2 != 0 and part1 ==0:
-        if part2 == -1:
-            part2 = random.randint(1,npart)
-            node2part[node2] = part2 
-            part2nodes[part2].add(node2)
-        part2edges[part2].append(line)
-
-    elif part2 == part1:
-        if part1 == -1:
-            part1 = random.randint(1,npart)
-            node2part[node1] = part1 
-            node2part[node2] = part1 
-            part2nodes[part1].add(node1)
-            part2nodes[part1].add(node2)
+    if part2 == part1:
         part2edges[part1].append(line)
         
-if args.out is not None:
+if args.outdir is not None:
     if not os.path.isdir(args.outdir):
         os.makedirs(args.outdir)
 
