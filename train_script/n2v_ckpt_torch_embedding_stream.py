@@ -37,14 +37,14 @@ def copy_to_local(shared_ckpt_path, local_ckpt_path):
     bucket.download_file(shared_ckpt_path, local_ckpt_path)
 
 for line in sys.stdin:
-    path, interrupt_epoch = line.strip().split(";")
-    interrupt_epoch = int(interrupt_epoch)
+    path, n_interrupt = line.strip().split(";")
+    n_interrupt = int(n_interrupt)
 
-    shared_ckpt_dir = 'checkpoint/'+'/'.join(path.split('/')[-3:-1])+str(interrupt_epoch)
+    shared_ckpt_dir = 'checkpoint_n2v/'+'/'.join(path.split('/')[-3:-1])+str(n_interrupt)
     local_ckpt_dir = os.path.join(ROOT_CKPT_DIR, shared_ckpt_dir)
 
     partid = re.search('(?<=/part_)[0-9]+(?=.txt*)',path).group(0)
-    indicator_file = os.path.join(local_ckpt_dir, '{}_interrupt_{}'.format(partid,interrupt_epoch))
+    indicator_file = os.path.join(local_ckpt_dir, '{}_interrupt'.format(partid))
 
     if not os.path.isdir(local_ckpt_dir):
         os.makedirs(local_ckpt_dir)
@@ -117,7 +117,7 @@ for line in sys.stdin:
         torch.save([node2id, model, epoch], local_ckpt_path)
         copy_from_local(local_ckpt_path, shared_ckpt_path)
         
-        if partid == '0' and epoch == interrupt_epoch and not os.path.isfile(indicator_file):
+        if int(partid) == epoch and int(partid) < n_interrupt and not os.path.isfile(indicator_file):
             subprocess.call(['touch', indicator_file])
             sys.exit(137)
 
