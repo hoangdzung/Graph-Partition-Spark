@@ -25,7 +25,7 @@ object Spinner {
 
     val spark = SparkSession.builder
       .appName(s"${this.getClass.getSimpleName}")
-      // .config("spark.master", "local")
+    //   .config("spark.master", "local")
       .getOrCreate()
 
     import spark.implicits._
@@ -41,8 +41,8 @@ object Spinner {
     var lambdaRank = args(7).toDouble
     val convergenceThreshold = args(8).toDouble
     val maxStep = args(9).toInt
-    val coreOutPath = args(10)
-    val partOutPath = args(11)
+    val partOutPath = args(10)
+    // val partOutPath = args(11)
     // val vertex2part = sc
     //   .textFile(partFileName)
     //   .map(line => {
@@ -89,24 +89,6 @@ object Spinner {
         (1 + Random.nextInt(numParts), attr)
     })
     graph.cache()
-    // graph.triplets.flatMap(x => {
-    //   if (x.srcAttr._1 == 0 && x.dstAttr._1 ==0 )
-    //     (1 to numParts).map(i => (i, x.srcId.toString +" " +x.dstId.toString))
-    //   else if (x.srcAttr._1 != 0 && x.dstAttr._1 ==0)
-    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
-    //   else if (x.srcAttr._1 == 0 && x.dstAttr._1 !=0)
-    //     Array((x.dstAttr._1, x.srcId.toString +" " +x.dstId.toString))
-    //   else if (x.srcAttr._1 == x.dstAttr._1 )
-    //     Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
-    //   else
-    //     Array[(String, String)]()
-    // })
-    // .partitionBy(new EdgePartitioner(numParts))
-    //   .saveAsTextFile(partOutPath)
-
-    // var graph = rawGraph.outerJoinVertices(rawGraph.degrees){   case (id, partId , Some(deg)) =>
-    //   (partId, deg)
-    // }
 
     var stop = false
     var step = 0
@@ -236,34 +218,53 @@ object Spinner {
       println("=========================================")
       step = step + 1
     }
-
-    val rawCoreGraph =
-      graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
-    rawCoreGraph.cache()
-    val largestCCIndex =
-      rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
-    val coreGraph =
-      rawCoreGraph.subgraph(vpred = (id, attr) => attr == largestCCIndex)
-    coreGraph.cache()
-    println("Reduce from "+rawCoreGraph.numVertices.toString + " nodes to "+ coreGraph.numVertices.toString + " nodes")
-   
-    val partGraph = graph.outerJoinVertices(coreGraph.vertices) {
-      (id, oldAttr, outDegOpt) =>
-        outDegOpt match {
-          case Some(outDeg) => 0
-          case None         => {
-            if (oldAttr._1 == 0)
-              1+ Random.nextInt(numParts)
-            else 
-              oldAttr._1
-          }
-        }
-    }
-    partGraph
-      .vertices
-      .map{case (id, attr) => id.toString + " " + attr.toString}
-      // .coalesce(1)
+    graph.triplets.flatMap(x => {
+      if (x.srcAttr._1 == 0 && x.dstAttr._1 ==0 )
+        (1 to numParts).map(i => (i, x.srcId.toString +" " +x.dstId.toString))
+      else if (x.srcAttr._1 != 0 && x.dstAttr._1 ==0)
+        Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+      else if (x.srcAttr._1 == 0 && x.dstAttr._1 !=0)
+        Array((x.dstAttr._1, x.srcId.toString +" " +x.dstId.toString))
+      else if (x.srcAttr._1 == x.dstAttr._1 )
+        Array((x.srcAttr._1, x.srcId.toString +" " +x.dstId.toString))
+      else
+        Array[(String, String)]()
+    })
+    .partitionBy(new EdgePartitioner(numParts))
+    .map(x=> x._2)
       .saveAsTextFile(partOutPath)
+
+    // var graph = rawGraph.outerJoinVertices(rawGraph.degrees){   case (id, partId , Some(deg)) =>
+    //   (partId, deg)
+    // }
+
+    // val rawCoreGraph =
+    //   graph.subgraph(vpred = (id, attr) => attr._1 == 0).connectedComponents()
+    // rawCoreGraph.cache()
+    // val largestCCIndex =
+    //   rawCoreGraph.vertices.map(x => (x._2, 1)).countByKey().maxBy(_._2)._1
+    // val coreGraph =
+    //   rawCoreGraph.subgraph(vpred = (id, attr) => attr == largestCCIndex)
+    // coreGraph.cache()
+    // println("Reduce from "+rawCoreGraph.numVertices.toString + " nodes to "+ coreGraph.numVertices.toString + " nodes")
+   
+    // val partGraph = graph.outerJoinVertices(coreGraph.vertices) {
+    //   (id, oldAttr, outDegOpt) =>
+    //     outDegOpt match {
+    //       case Some(outDeg) => 0
+    //       case None         => {
+    //         if (oldAttr._1 == 0)
+    //           1+ Random.nextInt(numParts)
+    //         else 
+    //           oldAttr._1
+    //       }
+    //     }
+    // }
+    // partGraph
+    //   .vertices
+    //   .map{case (id, attr) => id.toString + " " + attr.toString}
+    //   // .coalesce(1)
+    //   .saveAsTextFile(partOutPath)
     spark.stop()
   }
 }
