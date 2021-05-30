@@ -6,6 +6,7 @@ import subprocess
 import os 
 import numpy as np 
 import metis 
+import networkx as nx 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('whole')
@@ -17,20 +18,22 @@ args = parser.parse_args()
 
 G = nx.read_edgelist(args.whole)
 
-core_nodes = set(random.choice(G))
+print("Sampling core nodes...")
+core_nodes = set([random.choice([node for node in G.nodes])])
 while(True):
     cand_nodes = set()
     for node in core_nodes:
-        cand_nodes = cand_nodes.union([neigh for neigh in G.neighbor(node) if neigh not in core_nodes]) 
-    if len(cand_nodes) + len(corenodes) < args.core_size:
+        cand_nodes = cand_nodes.union([neigh for neigh in G.neighbors(node) if neigh not in core_nodes]) 
+    if len(cand_nodes) + len(cand_nodes) < args.core_size:
         core_nodes = core_nodes.union(cand_nodes)
     else:
         cand_nodes = random.sample(list(cand_nodes), k = args.core_size - len(core_nodes))
         core_nodes = core_nodes.union(cand_nodes)
         break
-
-not_core_G = G.subgraph([node for node in G if node not in core_node])
-ncut, parts = nxmetis.partition(not_core_G, nparts=args.npart)
+print("Constructing the rest of graph...")
+not_core_G = G.subgraph([node for node in G if node not in core_nodes])
+print("Partitioning the rest of graph...")
+ncut, parts = metis.part_graph(not_core_G, args.npart)
 part2nodes = defaultdict(list)
 for node, p in zip(G.nodes, parts):
     part2nodes[p].append(node) 
