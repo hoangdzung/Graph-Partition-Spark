@@ -9,7 +9,7 @@ import metis
 
 parser = argparse.ArgumentParser()
 parser.add_argument('whole')
-parser.add_argument('core_size')
+parser.add_argument('core_size', type=int)
 parser.add_argument('npart',type=int)
 parser.add_argument('--feats')
 parser.add_argument('--outdir')
