@@ -51,9 +51,9 @@ if args.outdir is not None:
             with open(os.path.join(args.outdir,'part_{}.txt.feat'.format(p)),'w') as f:
                 for node in tqdm(nodes+core_nodes,desc="Write feat {}".format(p)):
                     f.write("{} {}\n".format(node, " ".join(map(str, feats[node]))))
-    for p, nodes in part2nodes.items():
+    for p, nodes in tqdm(part2nodes.items(), desc="Write edges"):
         nx.write_edgelist(G.subgraph(nodes+core_nodes), os.path.join(args.outdir,'part_{}.txt'.format(p)), data=False )
 
 print("Ncut: ",ncut),
-print("Avg core deg: ", np.mean(len(G.degree(core_node)) for core_node in core_nodes) )
-print("Part size: ", [len(i) for i in parts] )
+print("Avg core deg: ", np.mean([G.degree(core_node) for core_node in core_nodes]) )
+print("Part size: ", [len(i) for i in part2nodes.values()] )
